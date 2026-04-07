@@ -39,6 +39,7 @@ The current implementation includes:
 - Browser mode requires Depository Participant, username, password, and TOTP secret.
 - Apply automation is disabled by default.
 - Dry-run is enabled by default for browser apply form preparation.
+- Live submission requires exact `MEROSHARE_LIVE_APPLY_CONFIRMATION` phrase and form secrets.
 - Keep credential values in local environment variables and do not commit them.
 
 ## Next Milestones

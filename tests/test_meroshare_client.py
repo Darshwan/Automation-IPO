@@ -7,6 +7,7 @@ import pytest
 
 from automation_ipo.main import build_client
 from automation_ipo.config import Settings
+from automation_ipo.main import LIVE_APPLY_CONFIRMATION_TEXT
 from automation_ipo.meroshare_client import BrowserMeroShareClient, HttpMeroShareClient
 
 
@@ -130,3 +131,64 @@ def test_build_client_browser_uses_dry_run_default() -> None:
     client = build_client(settings)
 
     assert isinstance(client, BrowserMeroShareClient)
+
+
+def test_build_client_blocks_live_apply_without_confirmation_phrase() -> None:
+    settings = Settings(
+        meroshare_client="browser",
+        meroshare_depository_participant="NMB Capital",
+        meroshare_username="demo-user",
+        meroshare_password="demo-pass",
+        meroshare_totp_secret="ABCDEFGHIJKLMNOP",
+        apply_enabled=True,
+        meroshare_apply_dry_run=False,
+        meroshare_crn_number="1234567890123456",
+        meroshare_transaction_pin="1234",
+    )
+
+    with pytest.raises(ValueError, match="meroshare_live_apply_confirmation"):
+        build_client(settings)
+
+
+def test_build_client_allows_live_apply_with_confirmation_phrase() -> None:
+    settings = Settings(
+        meroshare_client="browser",
+        meroshare_depository_participant="NMB Capital",
+        meroshare_username="demo-user",
+        meroshare_password="demo-pass",
+        meroshare_totp_secret="ABCDEFGHIJKLMNOP",
+        apply_enabled=True,
+        meroshare_apply_dry_run=False,
+        meroshare_live_apply_confirmation=LIVE_APPLY_CONFIRMATION_TEXT,
+        meroshare_crn_number="1234567890123456",
+        meroshare_transaction_pin="1234",
+    )
+
+    client = build_client(settings)
+
+    assert isinstance(client, BrowserMeroShareClient)
+
+
+def test_browser_row_parser_extracts_symbol_and_dates() -> None:
+    client = BrowserMeroShareClient(
+        base_url="https://example.test",
+        depository_participant="NMB Capital",
+        username="demo-user",
+        password="demo-pass",
+        totp_secret="ABCDEFGHIJKLMNOP",
+        crn_number=None,
+        transaction_pin=None,
+    )
+    now = datetime(2026, 4, 7, 0, 0, tzinfo=timezone.utc)
+
+    symbol, company_name, open_at, close_at = client._parse_asba_row_fields(
+        "Mega Hydropower Ltd. (MEGA)\nOpen: 2026-04-10\nClose: 2026-04-14",
+        ["Mega Hydropower Ltd. (MEGA)", "2026-04-10", "2026-04-14"],
+        index=0,
+        fallback_open_at=now,
+    )
+
+    assert symbol == "MEGA"
+    assert company_name == "Mega Hydropower Ltd."
+    assert open_at == datetime(2026, 4, 10, 0, 0, tzinfo=timezone.utc)
+    assert close_at == datetime(2026, 4, 14, 0, 0, tzinfo=timezone.utc)

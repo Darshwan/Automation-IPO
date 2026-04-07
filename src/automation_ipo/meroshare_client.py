@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import hashlib
+import re
 from typing import Any
 from contextlib import contextmanager
 
@@ -192,6 +193,7 @@ class BrowserMeroShareClient(MeroShareClient):
         headless: bool = True,
         timeout_ms: int = 30000,
         playwright_factory=None,
+        live_apply_confirmed: bool = False,
     ):
         self._base_url = base_url.rstrip("/")
         self._depository_participant = depository_participant
@@ -203,6 +205,7 @@ class BrowserMeroShareClient(MeroShareClient):
         self._apply_dry_run = apply_dry_run
         self._headless = headless
         self._timeout_ms = timeout_ms
+        self._live_apply_confirmed = live_apply_confirmed
         self._playwright_factory = playwright_factory
 
     def fetch_open_ipos(self) -> list[IPORecord]:
@@ -220,6 +223,9 @@ class BrowserMeroShareClient(MeroShareClient):
 
             if self._apply_dry_run:
                 return False
+
+            if not self._live_apply_confirmed:
+                raise PermissionError("Live apply confirmation is required before final submission")
 
             self._click_first(
                 page,
@@ -295,31 +301,68 @@ class BrowserMeroShareClient(MeroShareClient):
     def _extract_asba_ipos(self, page) -> list[IPORecord]:
         self._click_if_visible(page, ["text=Apply for issue", "text=Apply For Issue"])
 
-        rows = page.locator("table tbody tr")
+        rows = self._locate_asba_rows(page)
         count = rows.count()
         now = datetime.now(timezone.utc)
         results: list[IPORecord] = []
 
         for index in range(count):
-            text = rows.nth(index).inner_text().strip()
+            row = rows.nth(index)
+            text = row.inner_text().strip()
             if not text:
                 continue
 
-            symbol = self._extract_symbol(text, index)
-            company_name = self._extract_company_name(text, index)
+            cell_texts = [value.strip() for value in row.locator("td").all_inner_texts() if value.strip()]
+            symbol, company_name, open_at, close_at = self._parse_asba_row_fields(text, cell_texts, index, now)
             source_id = self._build_source_id(text, index)
 
             results.append(
                 IPORecord(
                     symbol=symbol,
                     company_name=company_name,
-                    open_at=now,
-                    close_at=None,
+                    open_at=open_at,
+                    close_at=close_at,
                     source_id=source_id,
                 )
             )
 
         return results
+
+    def _locate_asba_rows(self, page):
+        row_selectors = [
+            "table tbody tr",
+            "tbody tr",
+            "app-asba table tbody tr",
+            "div.table-responsive table tbody tr",
+            "mat-row",
+            "tr.ng-star-inserted",
+        ]
+        for selector in row_selectors:
+            rows = page.locator(selector)
+            if rows.count() > 0:
+                return rows
+        return page.locator("table tbody tr")
+
+    def _parse_asba_row_fields(
+        self,
+        row_text: str,
+        cell_texts: list[str],
+        index: int,
+        fallback_open_at: datetime,
+    ) -> tuple[str, str, datetime, datetime | None]:
+        combined = "\n".join(cell_texts) if cell_texts else row_text
+        symbol = self._extract_symbol(combined, index)
+        company_name = self._extract_company_name(combined, index)
+
+        open_at = fallback_open_at
+        close_at: datetime | None = None
+        date_candidates = self._extract_datetime_candidates(combined)
+        if date_candidates:
+            open_at = date_candidates[0]
+            if len(date_candidates) > 1:
+                close_at = date_candidates[1]
+
+        return symbol, company_name, open_at, close_at
 
     def _open_issue_form(self, page, ipo: IPORecord) -> None:
         row = page.locator(f"table tbody tr:has-text('{ipo.symbol}')")
@@ -429,6 +472,10 @@ class BrowserMeroShareClient(MeroShareClient):
                 return
 
     def _extract_symbol(self, row_text: str, index: int) -> str:
+        paren_match = re.search(r"\(([A-Z]{2,10})\)", row_text)
+        if paren_match:
+            return paren_match.group(1)
+
         tokens = [token.strip("()") for token in row_text.replace("\n", " ").split()]
         for token in tokens:
             if token.isupper() and 2 <= len(token) <= 10 and token.isalpha():
@@ -436,7 +483,9 @@ class BrowserMeroShareClient(MeroShareClient):
         return f"IPO{index + 1}"
 
     def _extract_company_name(self, row_text: str, index: int) -> str:
-        first_line = row_text.splitlines()[0].strip() if row_text.splitlines() else ""
+        lines = [line.strip() for line in row_text.splitlines() if line.strip()]
+        first_line = lines[0] if lines else ""
+        first_line = re.sub(r"\s*\([A-Z]{2,10}\)", "", first_line).strip()
         if first_line:
             return first_line[:120]
         return f"Issue {index + 1}"
@@ -444,3 +493,35 @@ class BrowserMeroShareClient(MeroShareClient):
     def _build_source_id(self, row_text: str, index: int) -> str:
         digest = hashlib.sha1(row_text.encode("utf-8")).hexdigest()[:16]
         return f"asba-{index + 1}-{digest}"
+
+    def _extract_datetime_candidates(self, value: str) -> list[datetime]:
+        candidates: list[datetime] = []
+        patterns = [
+            r"\b\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?\b",
+            r"\b\d{2}/\d{2}/\d{4}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?\b",
+            r"\b\d{2}-\d{2}-\d{4}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?\b",
+        ]
+        for pattern in patterns:
+            for match in re.findall(pattern, value):
+                parsed = self._parse_datetime_candidate(match)
+                if parsed:
+                    candidates.append(parsed)
+        return candidates
+
+    def _parse_datetime_candidate(self, value: str) -> datetime | None:
+        normalized = value.strip().replace("/", "-")
+        layouts = [
+            "%Y-%m-%d",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+            "%d-%m-%Y",
+            "%d-%m-%Y %H:%M",
+            "%d-%m-%Y %H:%M:%S",
+        ]
+        for layout in layouts:
+            try:
+                parsed = datetime.strptime(normalized, layout)
+                return parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+        return None

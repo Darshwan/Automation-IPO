@@ -11,7 +11,24 @@ from .notifier import ConsoleNotifier, EmailNotifier, Notifier
 from .state_store import SeenIPOStore
 
 
+LIVE_APPLY_CONFIRMATION_TEXT = "I_UNDERSTAND_AND_CONFIRM_LIVE_IPO_APPLY"
+
+
+def _secret_values_from_settings(settings: Settings) -> list[str]:
+    values = [
+        settings.meroshare_password,
+        settings.meroshare_totp_secret,
+        settings.meroshare_crn_number,
+        settings.meroshare_transaction_pin,
+        settings.smtp_password,
+        settings.twilio_auth_token,
+    ]
+    return [value for value in values if value]
+
+
 def build_notifier(settings: Settings) -> Notifier:
+    secrets = _secret_values_from_settings(settings)
+
     if settings.notifier == "email":
         if not settings.smtp_host or not settings.smtp_from_email or not settings.notify_email:
             raise ValueError(
@@ -25,9 +42,10 @@ def build_notifier(settings: Settings) -> Notifier:
             smtp_use_tls=settings.smtp_use_tls,
             from_email=settings.smtp_from_email,
             to_email=settings.notify_email,
+            secrets_to_redact=secrets,
         )
 
-    return ConsoleNotifier()
+    return ConsoleNotifier(secrets_to_redact=secrets)
 
 
 def build_client(settings: Settings, transport=None, playwright_factory=None) -> MeroShareClient:
@@ -45,6 +63,16 @@ def build_client(settings: Settings, transport=None, playwright_factory=None) ->
         if missing:
             raise ValueError(f"Missing required browser MeroShare settings: {', '.join(missing)}")
 
+        live_apply_confirmed = False
+        if settings.apply_enabled and not settings.meroshare_apply_dry_run:
+            if settings.meroshare_live_apply_confirmation != LIVE_APPLY_CONFIRMATION_TEXT:
+                raise ValueError(
+                    "Live apply requires exact meroshare_live_apply_confirmation value"
+                )
+            if not settings.meroshare_crn_number or not settings.meroshare_transaction_pin:
+                raise ValueError("Live apply requires meroshare_crn_number and meroshare_transaction_pin")
+            live_apply_confirmed = True
+
         return BrowserMeroShareClient(
             base_url=settings.meroshare_base_url,
             depository_participant=settings.meroshare_depository_participant,
@@ -56,6 +84,7 @@ def build_client(settings: Settings, transport=None, playwright_factory=None) ->
             apply_dry_run=settings.meroshare_apply_dry_run,
             headless=settings.meroshare_browser_headless,
             timeout_ms=int(settings.meroshare_timeout_seconds * 1000),
+            live_apply_confirmed=live_apply_confirmed,
             playwright_factory=playwright_factory,
         )
 
