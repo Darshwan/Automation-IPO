@@ -1,5 +1,10 @@
 # Automation IPO (MVP)
 
+## Project Status
+
+This project is complete as a portfolio case study and remains intentionally safety-gated for real-money usage.
+Use it to demonstrate architecture, security controls, and automation design patterns.
+
 ## Legal Disclaimer
 
 This project is for educational and controlled testing purposes. Automating actions against third-party financial systems may violate platform Terms of Service, trigger account restrictions, or create legal exposure depending on jurisdiction. You are responsible for confirming compliance before any live usage.
@@ -23,6 +28,21 @@ This project starts with a safe MVP pipeline:
 4. Run the watcher:
    - `automation-ipo --once`
    - or `python -m automation_ipo.main --once`
+
+## Portfolio Demo (How To Witness Effect)
+
+Run the safe demo mode to generate visible proof of behavior without real credentials:
+
+- `automation-ipo --portfolio-demo --demo-cycles 2`
+- or `python -m automation_ipo.main --portfolio-demo --demo-cycles 2`
+
+What you will observe:
+
+- Cycle 1 detects a new IPO from the mock provider.
+- Cycle 2 shows no new IPO because persisted state prevents duplicate processing.
+- A report file is generated at `.data/portfolio_demo_report.md`.
+
+This report is designed as portfolio evidence for system effect and stateful dedup behavior.
 
 ## Run Tests
 
@@ -52,6 +72,15 @@ The current implementation includes:
 ## Runtime Warning Banner
 
 At startup, the application prints legal and safety warnings indicating whether it is in safe mode or live-apply mode.
+
+## Wrap-Up Guidance
+
+For a portfolio-safe final state:
+
+- Keep `APPLY_ENABLED=false`.
+- Keep `MEROSHARE_APPLY_DRY_RUN=true`.
+- Avoid placing real transaction secrets in local files.
+- Use demo report output as your observable project result.
 
 ## Next Milestones
 

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
 import pytest
 
 from automation_ipo.config import Settings
-from automation_ipo.main import build_notifier, build_service, _print_startup_warning_banner
+from automation_ipo.main import (
+    _print_startup_warning_banner,
+    build_notifier,
+    build_service,
+    run_portfolio_demo,
+)
 from automation_ipo.models import IPORecord
 from datetime import datetime, timezone
 
@@ -65,3 +71,24 @@ def test_startup_warning_banner_mentions_safe_mode(capsys) -> None:
     output = capsys.readouterr().out
     assert "[LEGAL WARNING]" in output
     assert "[SAFE MODE]" in output
+
+
+def test_portfolio_demo_generates_report_and_dedup_signal(capsys, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = Settings()
+
+    report_path = run_portfolio_demo(settings=settings, cycles=2)
+
+    output = capsys.readouterr().out
+    assert "[PORTFOLIO DEMO] cycle=1" in output
+    assert "[PORTFOLIO DEMO] cycle=2" in output
+    assert report_path.exists()
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "| 1 | 1 | 1 | 0 |" in report
+    assert "| 2 | 1 | 0 | 0 |" in report
+
+
+def test_portfolio_demo_rejects_invalid_cycles() -> None:
+    with pytest.raises(ValueError, match="demo cycles"):
+        run_portfolio_demo(settings=Settings(), cycles=0)

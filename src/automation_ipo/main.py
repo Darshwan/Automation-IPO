@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+from pathlib import Path
 import time
 
 from .config import Settings, get_settings
@@ -126,6 +128,67 @@ def _print_startup_warning_banner(settings: Settings) -> None:
         print("[SAFE MODE] Dry-run or apply-disabled mode is active.")
 
 
+def _build_portfolio_demo_settings(settings: Settings) -> Settings:
+    data = settings.model_dump()
+    data.update(
+        {
+            "meroshare_client": "mock",
+            "apply_enabled": False,
+            "meroshare_apply_dry_run": True,
+            "ipo_state_file": Path(".data/portfolio_demo_seen.json"),
+        }
+    )
+    return Settings.model_validate(data)
+
+
+def run_portfolio_demo(settings: Settings, cycles: int = 2) -> Path:
+    if cycles < 1:
+        raise ValueError("demo cycles must be at least 1")
+
+    demo_settings = _build_portfolio_demo_settings(settings)
+    demo_state = demo_settings.ipo_state_file
+    report_path = Path(".data/portfolio_demo_report.md")
+
+    if demo_state.exists():
+        demo_state.unlink()
+
+    service = build_service(demo_settings)
+    results = []
+    for index in range(cycles):
+        result = service.sync_once()
+        results.append(result)
+        print(
+            f"[PORTFOLIO DEMO] cycle={index + 1} fetched={result.fetched_count} new={result.new_count} applied={result.applied_count}"
+        )
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    lines = [
+        "# Portfolio Demo Report",
+        "",
+        f"Generated at: {timestamp}",
+        "",
+        "## Demo Outcome",
+        "",
+        "This demo uses the mock provider with apply disabled to safely demonstrate dedup behavior.",
+        "",
+        "| Cycle | Fetched | New | Applied |",
+        "|---|---:|---:|---:|",
+    ]
+    for index, result in enumerate(results, start=1):
+        lines.append(
+            f"| {index} | {result.fetched_count} | {result.new_count} | {result.applied_count} |"
+        )
+    lines.append("")
+    lines.append(f"State file used: {demo_state.as_posix()}")
+    lines.append("")
+    lines.append("Expected signal: cycle 1 shows new=1, later cycles show new=0 because state persistence prevents duplicates.")
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[PORTFOLIO DEMO] report written to {report_path.as_posix()}")
+    return report_path
+
+
 def build_service(settings: Settings | None = None) -> IPOAutomationService:
     settings = settings or get_settings()
     _validate_live_apply_legal_gate(settings)
@@ -165,11 +228,27 @@ def run(once: bool) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Automation IPO runner")
     parser.add_argument("--once", action="store_true", help="Run one sync cycle and exit")
+    parser.add_argument(
+        "--portfolio-demo",
+        action="store_true",
+        help="Run a safe, deterministic mock demo and generate a portfolio report",
+    )
+    parser.add_argument(
+        "--demo-cycles",
+        type=int,
+        default=2,
+        help="Number of cycles for portfolio demo mode",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    settings = get_settings()
+    if args.portfolio_demo:
+        _print_startup_warning_banner(settings)
+        run_portfolio_demo(settings=settings, cycles=args.demo_cycles)
+        return
     run(once=args.once)
 
 
