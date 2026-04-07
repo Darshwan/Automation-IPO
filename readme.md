@@ -1,5 +1,11 @@
 # Automation IPO (MVP)
 
+## Legal Disclaimer
+
+This project is for educational and controlled testing purposes. Automating actions against third-party financial systems may violate platform Terms of Service, trigger account restrictions, or create legal exposure depending on jurisdiction. You are responsible for confirming compliance before any live usage.
+
+Live IPO submission is intentionally guarded by explicit environment flags and confirmation phrases. Do not enable live mode unless you have reviewed applicable Terms, regulations, and risk controls.
+
 This project starts with a safe MVP pipeline:
 
 - Detect new IPO entries from a provider
@@ -40,7 +46,12 @@ The current implementation includes:
 - Apply automation is disabled by default.
 - Dry-run is enabled by default for browser apply form preparation.
 - Live submission requires exact `MEROSHARE_LIVE_APPLY_CONFIRMATION` phrase and form secrets.
+- Live submission also requires `MEROSHARE_LEGAL_ACKNOWLEDGED=true`.
 - Keep credential values in local environment variables and do not commit them.
+
+## Runtime Warning Banner
+
+At startup, the application prints legal and safety warnings indicating whether it is in safe mode or live-apply mode.
 
 ## Next Milestones
 

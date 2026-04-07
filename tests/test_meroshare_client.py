@@ -142,11 +142,31 @@ def test_build_client_blocks_live_apply_without_confirmation_phrase() -> None:
         meroshare_totp_secret="ABCDEFGHIJKLMNOP",
         apply_enabled=True,
         meroshare_apply_dry_run=False,
+        meroshare_legal_acknowledged=True,
         meroshare_crn_number="1234567890123456",
         meroshare_transaction_pin="1234",
     )
 
     with pytest.raises(ValueError, match="meroshare_live_apply_confirmation"):
+        build_client(settings)
+
+
+def test_build_client_blocks_live_apply_without_legal_acknowledgement() -> None:
+    settings = Settings(
+        meroshare_client="browser",
+        meroshare_depository_participant="NMB Capital",
+        meroshare_username="demo-user",
+        meroshare_password="demo-pass",
+        meroshare_totp_secret="ABCDEFGHIJKLMNOP",
+        apply_enabled=True,
+        meroshare_apply_dry_run=False,
+        meroshare_live_apply_confirmation=LIVE_APPLY_CONFIRMATION_TEXT,
+        meroshare_legal_acknowledged=False,
+        meroshare_crn_number="1234567890123456",
+        meroshare_transaction_pin="1234",
+    )
+
+    with pytest.raises(ValueError, match="meroshare_legal_acknowledged"):
         build_client(settings)
 
 
@@ -160,6 +180,7 @@ def test_build_client_allows_live_apply_with_confirmation_phrase() -> None:
         apply_enabled=True,
         meroshare_apply_dry_run=False,
         meroshare_live_apply_confirmation=LIVE_APPLY_CONFIRMATION_TEXT,
+        meroshare_legal_acknowledged=True,
         meroshare_crn_number="1234567890123456",
         meroshare_transaction_pin="1234",
     )

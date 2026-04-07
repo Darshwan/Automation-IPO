@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     apply_share_quantity: int = 10
     meroshare_apply_dry_run: bool = True
     meroshare_live_apply_confirmation: str | None = None
+    meroshare_legal_acknowledged: bool = False
 
     meroshare_depository_participant: str | None = None
     meroshare_crn_number: str | None = None

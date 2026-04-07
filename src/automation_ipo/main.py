@@ -12,6 +12,7 @@ from .state_store import SeenIPOStore
 
 
 LIVE_APPLY_CONFIRMATION_TEXT = "I_UNDERSTAND_AND_CONFIRM_LIVE_IPO_APPLY"
+LEGAL_ACKNOWLEDGEMENT_TEXT = "I_HAVE_REVIEWED_TOS_AND_ACCEPT_RISK"
 
 
 def _secret_values_from_settings(settings: Settings) -> list[str]:
@@ -65,6 +66,10 @@ def build_client(settings: Settings, transport=None, playwright_factory=None) ->
 
         live_apply_confirmed = False
         if settings.apply_enabled and not settings.meroshare_apply_dry_run:
+            if not settings.meroshare_legal_acknowledged:
+                raise ValueError(
+                    "Live apply is blocked until meroshare_legal_acknowledged=true is explicitly set"
+                )
             if settings.meroshare_live_apply_confirmation != LIVE_APPLY_CONFIRMATION_TEXT:
                 raise ValueError(
                     "Live apply requires exact meroshare_live_apply_confirmation value"
@@ -104,8 +109,26 @@ def build_client(settings: Settings, transport=None, playwright_factory=None) ->
     )
 
 
+def _validate_live_apply_legal_gate(settings: Settings) -> None:
+    if settings.apply_enabled and not settings.meroshare_apply_dry_run:
+        if not settings.meroshare_legal_acknowledged:
+            raise ValueError(
+                "Live apply is blocked until meroshare_legal_acknowledged=true is explicitly set"
+            )
+
+
+def _print_startup_warning_banner(settings: Settings) -> None:
+    print("[LEGAL WARNING] This automation may violate third-party terms or local regulations.")
+    print("[LEGAL WARNING] Use at your own risk and review official MeroShare/CDSC policies before live use.")
+    if settings.apply_enabled and not settings.meroshare_apply_dry_run:
+        print("[LIVE APPLY MODE] Live submission requested. Legal acknowledgement and confirmation gates are enforced.")
+    else:
+        print("[SAFE MODE] Dry-run or apply-disabled mode is active.")
+
+
 def build_service(settings: Settings | None = None) -> IPOAutomationService:
     settings = settings or get_settings()
+    _validate_live_apply_legal_gate(settings)
 
     client = build_client(settings)
     notifier = build_notifier(settings)
@@ -126,6 +149,7 @@ def build_service(settings: Settings | None = None) -> IPOAutomationService:
 
 def run(once: bool) -> None:
     settings = get_settings()
+    _print_startup_warning_banner(settings)
     service = build_service(settings)
 
     while True:

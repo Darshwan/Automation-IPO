@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from automation_ipo.config import Settings
-from automation_ipo.main import build_notifier, build_service
+from automation_ipo.main import build_notifier, build_service, _print_startup_warning_banner
 from automation_ipo.models import IPORecord
 from datetime import datetime, timezone
 
@@ -34,3 +36,32 @@ def test_build_notifier_redacts_secrets_from_console_output(capsys) -> None:
     output = capsys.readouterr().out
     assert "MYSECRET1234" not in output
     assert "[REDACTED]" in output
+
+
+def test_build_service_blocks_live_apply_without_legal_acknowledgement() -> None:
+    settings = Settings(
+        meroshare_client="browser",
+        meroshare_depository_participant="NMB Capital",
+        meroshare_username="demo-user",
+        meroshare_password="demo-pass",
+        meroshare_totp_secret="ABCDEFGHIJKLMNOP",
+        apply_enabled=True,
+        meroshare_apply_dry_run=False,
+        meroshare_live_apply_confirmation="I_UNDERSTAND_AND_CONFIRM_LIVE_IPO_APPLY",
+        meroshare_crn_number="1234567890123456",
+        meroshare_transaction_pin="1234",
+        meroshare_legal_acknowledged=False,
+    )
+
+    with pytest.raises(ValueError, match="meroshare_legal_acknowledged"):
+        build_service(settings)
+
+
+def test_startup_warning_banner_mentions_safe_mode(capsys) -> None:
+    settings = Settings(apply_enabled=False)
+
+    _print_startup_warning_banner(settings)
+
+    output = capsys.readouterr().out
+    assert "[LEGAL WARNING]" in output
+    assert "[SAFE MODE]" in output
