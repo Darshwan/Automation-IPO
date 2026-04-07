@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     smtp_from_email: str | None = None
 
+    meroshare_client: Literal["mock", "http"] = "mock"
+    meroshare_login_url: str | None = None
+    meroshare_open_ipos_url: str | None = None
+    meroshare_apply_url: str | None = None
+    meroshare_timeout_seconds: float = 30.0
+
     meroshare_username: str | None = None
     meroshare_password: str | None = None
     meroshare_totp_secret: str | None = None

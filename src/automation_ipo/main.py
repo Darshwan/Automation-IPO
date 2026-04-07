@@ -5,7 +5,7 @@ import time
 
 from .config import Settings, get_settings
 from .ipo_service import IPOAutomationService
-from .meroshare_client import MockMeroShareClient
+from .meroshare_client import HttpMeroShareClient, MockMeroShareClient, MeroShareClient
 from .models import ApplicationPreferences
 from .notifier import ConsoleNotifier, EmailNotifier, Notifier
 from .state_store import SeenIPOStore
@@ -30,10 +30,30 @@ def build_notifier(settings: Settings) -> Notifier:
     return ConsoleNotifier()
 
 
+def build_client(settings: Settings, transport=None) -> MeroShareClient:
+    if settings.meroshare_client == "mock":
+        return MockMeroShareClient()
+
+    if not settings.meroshare_open_ipos_url:
+        raise ValueError("meroshare_open_ipos_url is required when meroshare_client=http")
+
+    return HttpMeroShareClient(
+        base_url=settings.meroshare_base_url,
+        login_url=settings.meroshare_login_url,
+        open_ipos_url=settings.meroshare_open_ipos_url,
+        apply_url=settings.meroshare_apply_url,
+        username=settings.meroshare_username,
+        password=settings.meroshare_password,
+        totp_secret=settings.meroshare_totp_secret,
+        timeout_seconds=settings.meroshare_timeout_seconds,
+        client=transport,
+    )
+
+
 def build_service(settings: Settings | None = None) -> IPOAutomationService:
     settings = settings or get_settings()
 
-    client = MockMeroShareClient()
+    client = build_client(settings)
     notifier = build_notifier(settings)
     seen_store = SeenIPOStore(settings.ipo_state_file)
 
