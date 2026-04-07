@@ -5,7 +5,7 @@ import time
 
 from .config import Settings, get_settings
 from .ipo_service import IPOAutomationService
-from .meroshare_client import HttpMeroShareClient, MockMeroShareClient, MeroShareClient
+from .meroshare_client import BrowserMeroShareClient, HttpMeroShareClient, MockMeroShareClient, MeroShareClient
 from .models import ApplicationPreferences
 from .notifier import ConsoleNotifier, EmailNotifier, Notifier
 from .state_store import SeenIPOStore
@@ -30,9 +30,34 @@ def build_notifier(settings: Settings) -> Notifier:
     return ConsoleNotifier()
 
 
-def build_client(settings: Settings, transport=None) -> MeroShareClient:
+def build_client(settings: Settings, transport=None, playwright_factory=None) -> MeroShareClient:
     if settings.meroshare_client == "mock":
         return MockMeroShareClient()
+
+    if settings.meroshare_client == "browser":
+        required = {
+            "meroshare_depository_participant": settings.meroshare_depository_participant,
+            "meroshare_username": settings.meroshare_username,
+            "meroshare_password": settings.meroshare_password,
+            "meroshare_totp_secret": settings.meroshare_totp_secret,
+        }
+        missing = [key for key, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"Missing required browser MeroShare settings: {', '.join(missing)}")
+
+        return BrowserMeroShareClient(
+            base_url=settings.meroshare_base_url,
+            depository_participant=settings.meroshare_depository_participant,
+            username=settings.meroshare_username,
+            password=settings.meroshare_password,
+            totp_secret=settings.meroshare_totp_secret,
+            crn_number=settings.meroshare_crn_number,
+            transaction_pin=settings.meroshare_transaction_pin,
+            apply_dry_run=settings.meroshare_apply_dry_run,
+            headless=settings.meroshare_browser_headless,
+            timeout_ms=int(settings.meroshare_timeout_seconds * 1000),
+            playwright_factory=playwright_factory,
+        )
 
     if not settings.meroshare_open_ipos_url:
         raise ValueError("meroshare_open_ipos_url is required when meroshare_client=http")
@@ -58,8 +83,8 @@ def build_service(settings: Settings | None = None) -> IPOAutomationService:
     seen_store = SeenIPOStore(settings.ipo_state_file)
 
     preferences = ApplicationPreferences(
-        share_quantity=10,
-        apply_enabled=False,
+        share_quantity=settings.apply_share_quantity,
+        apply_enabled=settings.apply_enabled,
     )
 
     return IPOAutomationService(

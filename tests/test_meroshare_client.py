@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import httpx
+import pytest
 
 from automation_ipo.main import build_client
 from automation_ipo.config import Settings
-from automation_ipo.meroshare_client import HttpMeroShareClient
+from automation_ipo.meroshare_client import BrowserMeroShareClient, HttpMeroShareClient
 
 
 def test_http_client_fetches_ipos_from_json_payload() -> None:
@@ -91,9 +92,41 @@ def test_http_client_applies_ipo_with_post_body() -> None:
 def test_build_client_rejects_http_mode_without_open_url() -> None:
     settings = Settings(meroshare_client="http")
 
-    try:
+    with pytest.raises(ValueError, match="meroshare_open_ipos_url"):
         build_client(settings)
-    except ValueError as error:
-        assert "meroshare_open_ipos_url" in str(error)
-    else:
-        raise AssertionError("Expected build_client to reject incomplete http settings")
+
+
+def test_build_client_rejects_browser_mode_without_required_settings() -> None:
+    settings = Settings(meroshare_client="browser")
+
+    with pytest.raises(ValueError, match="Missing required browser MeroShare settings"):
+        build_client(settings)
+
+
+def test_build_client_creates_browser_client_with_minimum_required_settings() -> None:
+    settings = Settings(
+        meroshare_client="browser",
+        meroshare_depository_participant="NMB Capital",
+        meroshare_username="demo-user",
+        meroshare_password="demo-pass",
+        meroshare_totp_secret="ABCDEFGHIJKLMNOP",
+        meroshare_apply_dry_run=True,
+    )
+
+    client = build_client(settings)
+
+    assert isinstance(client, BrowserMeroShareClient)
+
+
+def test_build_client_browser_uses_dry_run_default() -> None:
+    settings = Settings(
+        meroshare_client="browser",
+        meroshare_depository_participant="NMB Capital",
+        meroshare_username="demo-user",
+        meroshare_password="demo-pass",
+        meroshare_totp_secret="ABCDEFGHIJKLMNOP",
+    )
+
+    client = build_client(settings)
+
+    assert isinstance(client, BrowserMeroShareClient)

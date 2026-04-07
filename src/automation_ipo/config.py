@@ -23,7 +23,16 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     smtp_from_email: str | None = None
 
-    meroshare_client: Literal["mock", "http"] = "mock"
+    apply_enabled: bool = False
+    apply_share_quantity: int = 10
+    meroshare_apply_dry_run: bool = True
+
+    meroshare_depository_participant: str | None = None
+    meroshare_crn_number: str | None = None
+    meroshare_transaction_pin: str | None = None
+    meroshare_browser_headless: bool = True
+
+    meroshare_client: Literal["mock", "http", "browser"] = "mock"
     meroshare_login_url: str | None = None
     meroshare_open_ipos_url: str | None = None
     meroshare_apply_url: str | None = None
